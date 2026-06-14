@@ -149,7 +149,7 @@ void gps_print_data(const gps_data_t *gps_data)
         ESP_LOGI(TAG, "Vĩ tuyến: %.6f", gps_data->latitude);
         ESP_LOGI(TAG, "Kinh tuyến: %.6f", gps_data->longitude);
     } else {
-        ESP_LOGI(TAG, "chưa bắt đủ số lượng vệ tinh");
+        ESP_LOGI(TAG, "Chua co GPS fix (fix_quality=%d).", gps_data->fix_quality);
     }
 }
 

@@ -3,13 +3,14 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <driver/uart.h>
 
 //define parameter for sim
 #define BUF_SIZE_SIM            2048
-#define UART_SIM_NUM            UART_NUM_0
+#define UART_SIM_NUM            UART_NUM_2
 #define SIM_AT_QUEUE_SIZE       10
-#define SIM_TX                  GPIO_NUM_26
-#define SIM_RX                  GPIO_NUM_27
+#define SIM_TX                  2
+#define SIM_RX                  4
 #define SIM_BaudRate            115200
 //define parameter for gps
 #define GPS_UART_NUM            UART_NUM_1
@@ -20,12 +21,13 @@
 #define GPS_RX                  17
 #define GPS_BaudRate            9600
 //define parameter for mqtt
-#define MQTT_BROKER_URL         "broker.chtlab.us"
+#define MQTT_BROKER_URL         "tcp://broker.chtlab.us:1883"
 #define MQTT_BROKER_PORT        1883
 #define MQTT_USERNAME           "username"
 #define MQTT_PASSWORD           "password"
 #define MQTT_CLIENT_ID          "minh_test_esp32"
 #define MQTT_SUBTOPIC           "esp32/subtopic"
+#define MQTT_PRIVATE_TOPIC       "esp32/private_topic"
 #define MQTT_PUBTOPIC           "esp32/pubtopic"
 
 

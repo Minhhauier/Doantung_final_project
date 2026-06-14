@@ -1,0 +1,7 @@
+idf_component_register(SRCS "at_command.c"
+                    INCLUDE_DIRS include
+                    REQUIRES
+                        driver
+                        freertos
+                        config_parameter
+)
