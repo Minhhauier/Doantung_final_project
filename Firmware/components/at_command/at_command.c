@@ -14,6 +14,7 @@
 static char *MQTT_TAG = "MQTT";
 char data[BUF_SIZE_SIM];
 bool mqtt_sub_success = false;
+bool read_enable = false;
 //for normal at command
 void at_command_init(void)
 {
@@ -91,6 +92,39 @@ void send_at_data_get_respond(const char *data_cmd, int timeout)
 //     publish_queue_handle = xQueueCreate(10, BUF_SIZE_SIM);
 //     queue_created = 1;
 // }
+
+void convert_to_json_update(const char *data) {
+    if(data==NULL) return;
+    char dt[2048];
+    strcpy(dt,data);
+    // if(strstr(data,"broadcast")==NULL){
+    //     convert_to_json(data);
+    //     return;
+    // }
+    //ESP_LOGI("DATA_RAW"," %s\r\n",data);
+    char *final_data=NULL;
+    char *start;char *end;
+    start = (char *)dt;
+    char the_last_data[2048];
+    while (1){
+      start = strchr(start,'{');
+      if(start==NULL) break;   
+      end = strchr(start,'}');
+      if(end==NULL) break;
+      int len = end - start + 2;
+      final_data = malloc(len + 1);
+      memcpy(final_data,start,len);
+      final_data[len]='\0';
+      //printf("data_final: %s\r\n",final_data);
+      sprintf(the_last_data, "%s}", final_data);
+      printf("data_final: %s\r\n",the_last_data);
+        // convert_to_json(final_data);
+      start=end+1;  
+      free(final_data);
+     }
+}
+
+
 void read_and_send_to_queue_task(void *pvParameters)
 {
     char *data_receiver=malloc(2048);
@@ -98,20 +132,26 @@ void read_and_send_to_queue_task(void *pvParameters)
    // printf("Start read_and_send_to_queue_task\r\n");
     while (1)
     {
-        int len = uart_read_bytes(UART_SIM_NUM, data_receiver, 2048, 30 / portTICK_PERIOD_MS);
-        if (len > 0)
+        if(read_enable)
         {
-            data_receiver[len] = '\0';
-            // printf("data_rx: %s\r\n",data_receiver);
-            if (strstr(data_receiver, "+QMTRECV:") != NULL)
+            int len = uart_read_bytes(UART_SIM_NUM, data_receiver, 2048, 30 / portTICK_PERIOD_MS);
+            if (len > 0)
             {
-                memcpy(data_copy,data_receiver,len+1);
-            
+                data_receiver[len] = '\0';
                 printf("data_rx: %s\r\n",data_receiver);
-                //  convert_to_json_update(data_copy);
-                //   printf("Send to mqtt queue: %s\r\n", data_receiver);
-                //  xQueueSend(mqtt_queue_handle, data_receiver, portMAX_DELAY);
+                if (strstr(data_receiver, "+CMQTTRXPAYLOAD:") != NULL)
+                {
+                    memcpy(data_copy,data_receiver,len+1);
+                
+                    //printf("data_rx: %s\r\n",data_receiver);
+                    convert_to_json_update(data_copy);
+                    //   printf("Send to mqtt queue: %s\r\n", data_receiver);
+                    //  xQueueSend(mqtt_queue_handle, data_receiver, portMAX_DELAY);
+                }
             }
+        }
+        else{
+            vTaskDelay(500 / portTICK_PERIOD_MS);
         }
     }
     free(data_receiver);
@@ -142,22 +182,67 @@ void read_and_send_to_queue_task(void *pvParameters)
 //     }
 //     free(data);
 // }
+static char cmd[256];
+void mqtt_connect(){
+    send_at_get_respond("AT+CMQTTSTART", 5000);
+    send_at_get_respond("AT+CMQTTACCQ=0,\"clienttest0\"", 2000);
+    snprintf(cmd, sizeof(cmd), "AT+CMQTTCONNECT=0,\"%s\",60,1", MQTT_BROKER_URL);
+    send_at_get_respond(cmd, 10000);
+    // snprintf(cmd, sizeof(cmd), "AT+CMQTTSUB=0,%d,1", (int)strlen(MQTT_SUBTOPIC));
+    // send_at_get_respond(cmd, 2000);
+    // send_at_data_get_respond(MQTT_SUBTOPIC, 5000);
+}
+void mqtt_sub(const char *subtopic){
+    snprintf(cmd, sizeof(cmd), "AT+CMQTTSUB=0,%d,1", (int)strlen(subtopic));
+    send_at_get_respond(cmd, 2000);
+    send_at(subtopic);
+    read_sim_respond(2000);
+    if(strstr(data, "+CMQTTSUB: 0,0") != NULL) mqtt_sub_success = true;
+    else mqtt_sub_success = false;
+}
 
+void mqtt_init(){
+    int count=0;
+    read_enable = false;
+    mqtt_connect();
+    mqtt_sub(MQTT_SUBTOPIC);
+    while (mqtt_sub_success == false)
+    {
+        count=count+100;
+        mqtt_connect();
+        mqtt_sub(MQTT_SUBTOPIC);
+        if(count>1000) {
+            count=0;
+            send_at("AT+CFUN=1,1");
+            vTaskDelay(1000/portTICK_PERIOD_MS);
+        }
+    }
+    read_enable = true;
+    ESP_LOGI(MQTT_TAG,"Connect and subscribe to mqtt success");
+}
 
-// void  mqtt_init(){
-//     int count=0;
-//     mqtt_connect();
-//     mqtt_sub(MQTT_SUBTOPIC, MQTT_PRIVATE_TOPIC);
-//     while (mqtt_sub_success == false)
-//     {
-//         count=count+100;
-//         mqtt_connect();
-//         mqtt_sub(MQTT_SUBTOPIC, MQTT_PRIVATE_TOPIC);
-//         if(count>1000) {
-//             count=0;
-//             send_at("AT+CFUN=1,1");
-//             vTaskDelay(1000/portTICK_PERIOD_MS);
-//         }
-//     }
-//     ESP_LOGI(MQTT_TAG,"Connect and subscribe to mqtt success");
-// }
+void mqtt_publish(const char *topic, const char *data){
+    snprintf(cmd, sizeof(cmd), "AT+CMQTTTOPIC=0,%d",strlen(topic));
+    send_at(cmd);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    send_at(topic);
+    vTaskDelay(100/ portTICK_PERIOD_MS);
+    snprintf(cmd,sizeof(cmd),"AT+CMQTTPAYLOAD=0,%d", strlen(data));
+    send_at(cmd);
+    vTaskDelay(100/ portTICK_PERIOD_MS);
+    send_at(data);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    snprintf(cmd,sizeof(cmd),"AT+CMQTTPUB=0,1,%d", strlen(data));
+    send_at(cmd);
+}
+
+char json[1024];
+void publish_gpsposition(float latitude_decimal,float longitude_decimal){
+    snprintf(json,sizeof(json),"{\n"
+        "  \"gps\": {\n"
+        "    \"longitude\": %f,\n"
+        "    \"latitude\": %f\n"
+        "  }\n"
+        "}",latitude_decimal,longitude_decimal);
+    mqtt_publish(MQTT_PUBTOPIC, json);
+}   

@@ -10,5 +10,10 @@ void send_at(const char *command);
 void send_at_get_respond(const char *cmd, int timeout);
 void send_at_data_get_respond(const char *data_cmd, int timeout);
 void at_command_init(void);
+void mqtt_connect();
+void mqtt_sub(const char *subtopic);
+void mqtt_init();
+void mqtt_publish(const char *topic, const char *data);
+void publish_gpsposition(float latitude_decimal,float longitude_decimal);
 
 #endif

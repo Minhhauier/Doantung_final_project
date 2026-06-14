@@ -14,18 +14,20 @@ void app_main(void)
 {
     gps_neo6m_init();
     at_command_init();
-    // xTaskCreate(read_gps_data_task, "read_gps_data_task", 4096, NULL, 5, NULL);
+    
     // xTaskCreate(read_and_send_to_queue_task, "read_and_send_to_queue_task", 4096, NULL, 5, NULL);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
-    send_at_get_respond("AT", 1000);
-    send_at_get_respond("ATE0", 1000);
-    send_at_get_respond("AT+CMQTTSTART", 5000);
-    send_at_get_respond("AT+CMQTTACCQ=0,\"clienttest0\"", 2000);
-    snprintf(cmd, sizeof(cmd), "AT+CMQTTCONNECT=0,\"%s\",60,1", MQTT_BROKER_URL);
-    send_at_get_respond(cmd, 10000);
-    snprintf(cmd, sizeof(cmd), "AT+CMQTTSUB=0,%d,1", (int)strlen(MQTT_SUBTOPIC));
-    send_at_get_respond(cmd, 2000);
-    send_at_data_get_respond(MQTT_SUBTOPIC, 5000);
+    mqtt_init();
+    xTaskCreate(read_and_send_to_queue_task, "read_and_send_to_queue_task", 1024*8, NULL, 5, NULL);
+    xTaskCreate(read_gps_data_task, "read_gps_data_task", 4096, NULL, 5, NULL);    // send_at_get_respond("AT", 1000);
+    // send_at_get_respond("ATE0", 1000);
+    // send_at_get_respond("AT+CMQTTSTART", 5000);
+    // send_at_get_respond("AT+CMQTTACCQ=0,\"clienttest0\"", 2000);
+    // snprintf(cmd, sizeof(cmd), "AT+CMQTTCONNECT=0,\"%s\",60,1", MQTT_BROKER_URL);
+    // send_at_get_respond(cmd, 10000);
+    // snprintf(cmd, sizeof(cmd), "AT+CMQTTSUB=0,%d,1", (int)strlen(MQTT_SUBTOPIC));
+    // send_at_get_respond(cmd, 2000);
+    // send_at_data_get_respond(MQTT_SUBTOPIC, 5000);
     while (1)
     {
         vTaskDelay(1000 / portTICK_PERIOD_MS);

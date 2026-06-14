@@ -8,7 +8,8 @@
 #include <stdlib.h>
 #include <driver/uart.h>
 
-#include "config_parameter.h"
+#include "config_parameter.h"       
+#include "at_command.h"
 
 static const char *TAG = "GPS";
 
@@ -148,6 +149,10 @@ void gps_print_data(const gps_data_t *gps_data)
     if (gps_data->has_fix) {
         ESP_LOGI(TAG, "Vĩ tuyến: %.6f", gps_data->latitude);
         ESP_LOGI(TAG, "Kinh tuyến: %.6f", gps_data->longitude);
+        if(mqtt_sub_success)
+        {
+            publish_gpsposition(gps_data->latitude, gps_data->longitude);
+        }
     } else {
         ESP_LOGI(TAG, "Chua co GPS fix (fix_quality=%d).", gps_data->fix_quality);
     }
@@ -179,7 +184,7 @@ void read_gps_data_task(void *pvParameters)
         .longitude = 0.0,
         .has_fix = false,
     };
-
+    TickType_t last_time = xTaskGetTickCount();
     while (1) {
         uint8_t byte;
         int len = uart_read_bytes(GPS_UART_NUM, &byte, 1, 100 / portTICK_PERIOD_MS);
@@ -195,11 +200,15 @@ void read_gps_data_task(void *pvParameters)
                     gps_data.satellites_in_view = 0;
                 }
 
-                ESP_LOGI(TAG, "UART raw: %s", line_buffer);
+                // ESP_LOGI(TAG, "UART raw: %s", line_buffer);
                 gps_parse_nmea_line(line_buffer, &gps_data);
 
                 if (strncmp(line_buffer, "$GPGLL", 6) == 0 || strncmp(line_buffer, "$GNGLL", 6) == 0) {
-                    gps_print_data(&gps_data);
+                    if(xTaskGetTickCount() - last_time > 200)
+                    {
+                        last_time = xTaskGetTickCount();
+                        gps_print_data(&gps_data);
+                    }
                 }
             }
             line_len = 0;
@@ -215,5 +224,6 @@ void read_gps_data_task(void *pvParameters)
         } else {
             line_len = 0;
         }
+        // vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 }

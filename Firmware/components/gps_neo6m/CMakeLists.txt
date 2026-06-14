@@ -4,4 +4,5 @@ idf_component_register(SRCS "gps_neo6m.c"
                         driver
 
                         config_parameter
+                        at_command
                     )
