@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart'
     show ChangeNotifier, debugPrint, debugPrintStack, kIsWeb;
+import 'package:latlong2/latlong.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'mqtt_client_helper.dart';
 
@@ -70,6 +72,9 @@ class MqttService extends ChangeNotifier {
 
   DateTime? _lastMessageTime;
   DateTime? get lastMessageTime => _lastMessageTime;
+
+  LatLng? _gpsPosition;
+  LatLng? get gpsPosition => _gpsPosition;
 
   final List<({String topic, String payload, DateTime time})> _messageHistory =
       [];
@@ -287,10 +292,43 @@ class MqttService extends ChangeNotifier {
       ));
       if (_messageHistory.length > 50) _messageHistory.removeLast();
 
+      _parseGps(decoded);
+
       notifyListeners();
     } catch (e, st) {
       debugPrint('[MQTT] Lỗi xử lý tin nhắn: $e');
       debugPrintStack(stackTrace: st);
+    }
+  }
+
+  // Parse gói tin GPS từ ESP32.
+  void _parseGps(String raw) {
+    try {
+      final map = json.decode(raw);
+      if (map is! Map<String, dynamic>) return;
+
+      final gps = map['gps'];
+      if (gps is! Map<String, dynamic>) return;
+
+      final dynamic lonField = gps['longitude'];
+      final dynamic latField = gps['latitude'];
+
+      if (lonField == null || latField == null) return;
+
+      final double lonValue = (lonField as num).toDouble();
+      final double latValue = (latField as num).toDouble();
+
+      // ESP32 hiện tại gửi ngược: field "longitude" chứa giá trị lat (~21),
+      // field "latitude" chứa giá trị lon (~105). Hoán đổi lại:
+      final double actualLat = lonValue; // ~20.98 → vĩ độ
+      final double actualLon = latValue; // ~105.81 → kinh độ
+
+      if (actualLat < -90 || actualLat > 90) return;
+      if (actualLon < -180 || actualLon > 180) return;
+
+      _gpsPosition = LatLng(actualLat, actualLon);
+    } catch (e) {
+      debugPrint('[MQTT] Lỗi parse GPS: $e');
     }
   }
 
