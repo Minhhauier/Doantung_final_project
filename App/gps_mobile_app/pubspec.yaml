@@ -36,6 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_map: ^8.3.0
   latlong2: ^0.9.1
+  mqtt_client: ^10.5.2
+  provider: ^6.1.2
 
 dev_dependencies:
   flutter_test:
