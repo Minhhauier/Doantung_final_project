@@ -4,4 +4,5 @@ idf_component_register(SRCS "main.c"
                         gps_neo6m
                         at_command
                         config_parameter
+                        rfid_rc522
                     )

@@ -20,6 +20,15 @@
 #define GPS_TX                  16
 #define GPS_RX                  17
 #define GPS_BaudRate            9600
+//define parameter for rfid rc522 (SPI2/HSPI default pins on ESP32 30-pin)
+#define RFID_SPI_HOST           SPI2_HOST
+#define RFID_SPI_FREQ_HZ        5000000     // 5 MHz
+#define RFID_PIN_MOSI           23
+#define RFID_PIN_MISO           19
+#define RFID_PIN_CLK            18
+#define RFID_PIN_CS             5
+#define RFID_PIN_RST            32
+#define RFID_QUEUE_SIZE         10
 //define parameter for mqtt
 #define MQTT_BROKER_URL         "tcp://broker.chtlab.us:1883"
 #define MQTT_BROKER_PORT        1883
