@@ -437,7 +437,7 @@ void rfid_rc522_task(void *pvParameters)
 
             if(strcmp(uid_str, "67:0A:84:33") == 0){
                 gpio_set_level(BUZZER_PIN, 1);
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                vTaskDelay(200 / portTICK_PERIOD_MS);
                 gpio_set_level(BUZZER_PIN, 0);
                 // l9110s_lock_request_open();
                 if(key_status == 0) {
@@ -453,7 +453,7 @@ void rfid_rc522_task(void *pvParameters)
             }
             else{
                 gpio_set_level(BUZZER_PIN, 1);
-                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                vTaskDelay(200 / portTICK_PERIOD_MS);
                 gpio_set_level(BUZZER_PIN, 0);
                 if(check_history_uid(uid_str)) {
                     new_card = 0;
@@ -473,13 +473,11 @@ void rfid_rc522_task(void *pvParameters)
                         gpio_set_level(BUZZER_PIN, 1);
                         vTaskDelay(3000 / portTICK_PERIOD_MS);
                         gpio_set_level(BUZZER_PIN, 0);
-                        if(mqtt_sub_success){
-                            if (mqtt_sub_success) {
-                                snprintf(mqtt_payload, sizeof(mqtt_payload),
-                                         "{\"warning\":\"%d\", \"times\":\"%d\"}", 1, count_error);
-                                // mqtt_publish(MQTT_PUBTOPIC, mqtt_payload);
-                                xQueueSend(publish_queue_handle, mqtt_payload, portMAX_DELAY);
-                            }
+                        if (mqtt_sub_success) {
+                            snprintf(mqtt_payload, sizeof(mqtt_payload),
+                                        "{\"warning\":\"%d\", \"times\":\"%d\"}", 1, count_error);
+                            // mqtt_publish(MQTT_PUBTOPIC, mqtt_payload);
+                            xQueueSend(publish_queue_handle, mqtt_payload, portMAX_DELAY);
                         }
                         count_error = 0;
                     }

@@ -11,9 +11,14 @@
 #include "rfid_rc522.h"
 #include "l9110s.h"
 #include <driver/gpio.h>
+#include "esp_sleep.h"
+
+
+static const char *TAG = "MAIN";
 
 void app_main(void)
 {
+    esp_log_level_set("*", ESP_LOG_NONE);
     gps_neo6m_init();
     at_command_init();
     rfid_rc522_init();

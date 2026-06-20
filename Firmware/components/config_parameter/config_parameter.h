@@ -35,7 +35,7 @@
 #define BUZZER_PIN              33   // buzzer pin
 #define LOCK_PIN_LIMIT          35   // C nối GPIO35, NO nối 3.3V → kích = HIGH (dùng khi MỞ)
 #define LOCK_PWM_FREQ_HZ        5000
-#define LOCK_PWM_DUTY           204  // 80% of 255 (8-bit)
+#define LOCK_PWM_DUTY           200  // 80% of 255 (8-bit)
 #define LOCK_OPEN_TIMEOUT_MS    3000 // Timeout an toàn khi mở (limit hỏng)
 #define LOCK_CLOSE_TIMEOUT_MS   2000 // Thời gian chạy motor để đóng (ms)
 #define LOCK_DEBOUNCE_MS        50   // Debounce limit switch (ms)
