@@ -38,9 +38,11 @@ bool _isValidHost(String host) {
   return true;
 }
 
-// ─── Status enum ──────────────────────────────────────────────────────────────
+// ─── Status enums ─────────────────────────────────────────────────────────────
 
 enum MqttConnectionStatus { disconnected, connecting, connected, error }
+
+enum VehicleStatus { moving, stationary, unknown }
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,7 @@ class MqttService extends ChangeNotifier {
   static const String _username = 'username';
   static const String _password = 'password';
   static const String _subscribeTopic = 'esp32/pubtopic';
+  static const String _publishTopic = 'esp32/subtopic';
 
   MqttClient? _client;
   bool _isConnecting = false;
@@ -73,8 +76,26 @@ class MqttService extends ChangeNotifier {
   DateTime? _lastMessageTime;
   DateTime? get lastMessageTime => _lastMessageTime;
 
+  bool _lockStatus = false;
+  bool get lockStatus => _lockStatus;
+
+  bool _hornStatus = false;
+  bool get hornStatus => _hornStatus;
+
+  // Stream phát rfid mới khi nhận gói new_card == 1
+  final _newRfidController = StreamController<String>.broadcast();
+  Stream<String> get newRfidStream => _newRfidController.stream;
+
   LatLng? _gpsPosition;
   LatLng? get gpsPosition => _gpsPosition;
+
+  VehicleStatus _vehicleStatus = VehicleStatus.unknown;
+  VehicleStatus get vehicleStatus => _vehicleStatus;
+
+  DateTime? _lastGpsTime;
+  DateTime? get lastGpsTime => _lastGpsTime;
+
+  Timer? _gpsTimeoutTimer;
 
   final List<({String topic, String payload, DateTime time})> _messageHistory =
       [];
@@ -293,6 +314,7 @@ class MqttService extends ChangeNotifier {
       if (_messageHistory.length > 50) _messageHistory.removeLast();
 
       _parseGps(decoded);
+      _parseRfid(decoded);
 
       notifyListeners();
     } catch (e, st) {
@@ -302,6 +324,8 @@ class MqttService extends ChangeNotifier {
   }
 
   // Parse gói tin GPS từ ESP32.
+  // Lưu ý: ESP32 gửi ngược tên field — "longitude" chứa giá trị lat (~21),
+  // "latitude" chứa giá trị lon (~105). Hoán đổi lại để đúng toạ độ Việt Nam.
   void _parseGps(String raw) {
     try {
       final map = json.decode(raw);
@@ -312,23 +336,117 @@ class MqttService extends ChangeNotifier {
 
       final dynamic lonField = gps['longitude'];
       final dynamic latField = gps['latitude'];
-
       if (lonField == null || latField == null) return;
 
-      final double lonValue = (lonField as num).toDouble();
-      final double latValue = (latField as num).toDouble();
-
-      // ESP32 hiện tại gửi ngược: field "longitude" chứa giá trị lat (~21),
-      // field "latitude" chứa giá trị lon (~105). Hoán đổi lại:
-      final double actualLat = lonValue; // ~20.98 → vĩ độ
-      final double actualLon = latValue; // ~105.81 → kinh độ
+      final double actualLat = (lonField as num).toDouble();
+      final double actualLon = (latField as num).toDouble();
 
       if (actualLat < -90 || actualLat > 90) return;
       if (actualLon < -180 || actualLon > 180) return;
 
-      _gpsPosition = LatLng(actualLat, actualLon);
+      _updateVehicleStatus(LatLng(actualLat, actualLon));
     } catch (e) {
       debugPrint('[MQTT] Lỗi parse GPS: $e');
+    }
+  }
+
+  void _updateVehicleStatus(LatLng newPos) {
+    _gpsTimeoutTimer?.cancel();
+
+    if (_gpsPosition != null) {
+      final meters =
+          const Distance().as(LengthUnit.Meter, _gpsPosition!, newPos);
+      _vehicleStatus =
+          meters > 10.0 ? VehicleStatus.moving : VehicleStatus.stationary;
+    } else {
+      _vehicleStatus = VehicleStatus.stationary;
+    }
+
+    _gpsPosition = newPos;
+    _lastGpsTime = DateTime.now();
+
+    // Nếu 30s không nhận thêm GPS → "không xác định"
+    _gpsTimeoutTimer = Timer(const Duration(seconds: 30), () {
+      _vehicleStatus = VehicleStatus.unknown;
+      notifyListeners();
+    });
+  }
+
+  // ─── Parse RFID packet ────────────────────────────────────────────────────────
+
+  void _parseRfid(String raw) {
+    try {
+      final map = json.decode(raw);
+      if (map is! Map<String, dynamic>) return;
+      if (!map.containsKey('rfid')) return;
+
+      final rfid = map['rfid']?.toString();
+      if (rfid == null || rfid.isEmpty) return;
+
+      final newCard = map['new_card'];
+      final keyStatusRaw = map['key_status'];
+
+      if (newCard == 1) {
+        // Thẻ mới — phát qua stream để RfidService tự động lưu
+        _newRfidController.add(rfid);
+      } else {
+        // Thẻ đã biết — đồng bộ trạng thái khóa nếu lệch
+        if (keyStatusRaw is int) {
+          final deviceLocked = keyStatusRaw == 1;
+          if (_lockStatus != deviceLocked) {
+            _lockStatus = deviceLocked;
+            // notifyListeners sẽ được gọi bởi _onMessageReceived
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[MQTT] Lỗi parse RFID: $e');
+    }
+  }
+
+  // ─── Lock / Horn state setters ────────────────────────────────────────────
+
+  void setLockStatus(bool locked) {
+    _lockStatus = locked;
+    notifyListeners();
+    publishLock(locked: locked);
+  }
+
+  void setHornStatus(bool on) {
+    _hornStatus = on;
+    notifyListeners();
+    publishHorn(on: on);
+  }
+
+  // ─── Publish commands ────────────────────────────────────────────────────────
+
+  void publishHorn({required bool on}) =>
+      _publishCommand({'buzzer': on ? 1 : 0});
+
+  void publishLock({required bool locked}) =>
+      _publishCommand({'key_status': locked ? 1 : 0});
+
+  void publishAddCard(String rfid) =>
+      _publishCommand({'add_card': 1, 'rfid_new': rfid});
+
+  void publishRemoveCard(String rfid) =>
+      _publishCommand({'add_card': 0, 'rfid_new': rfid});
+
+  void _publishCommand(Map<String, dynamic> payload) {
+    if (!isConnected || _client == null) {
+      debugPrint('[MQTT] Không thể publish — chưa kết nối');
+      return;
+    }
+    try {
+      final builder = MqttClientPayloadBuilder()
+        ..addUTF8String(json.encode(payload));
+      _client!.publishMessage(
+        _publishTopic,
+        MqttQos.atLeastOnce,
+        builder.payload!,
+      );
+    } catch (e) {
+      debugPrint('[MQTT] Lỗi publish: $e');
     }
   }
 
@@ -354,6 +472,8 @@ class MqttService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _gpsTimeoutTimer?.cancel();
+    _newRfidController.close();
     _client?.disconnect();
     super.dispose();
   }

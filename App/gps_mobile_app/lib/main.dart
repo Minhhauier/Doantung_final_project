@@ -2,12 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:nckh_app/components/home_page.dart';
 import 'package:nckh_app/services/mqtt_service.dart';
+import 'package:nckh_app/services/rfid_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Khởi tạo RfidService: load dữ liệu từ bộ nhớ + lắng nghe MQTT stream
+  await RfidService.instance.init();
+
   runApp(
-    // Dùng .value để Provider trỏ vào singleton thay vì tạo instance mới
-    ChangeNotifierProvider<MqttService>.value(
-      value: MqttService.instance,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<MqttService>.value(value: MqttService.instance),
+        ChangeNotifierProvider<RfidService>.value(value: RfidService.instance),
+      ],
       child: const MyApp(),
     ),
   );
