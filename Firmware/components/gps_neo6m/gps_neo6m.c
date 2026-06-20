@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <driver/uart.h>
+#include "esp_sleep.h"
 
 #include "config_parameter.h"       
 #include "at_command.h"
@@ -185,7 +186,9 @@ void read_gps_data_task(void *pvParameters)
         .has_fix = false,
     };
     TickType_t last_time = xTaskGetTickCount();
+    TickType_t weakup_time = xTaskGetTickCount();
     while (1) {
+        weakup_time = xTaskGetTickCount();
         uint8_t byte;
         int len = uart_read_bytes(GPS_UART_NUM, &byte, 1, 100 / portTICK_PERIOD_MS);
         if (len <= 0) {
@@ -224,6 +227,11 @@ void read_gps_data_task(void *pvParameters)
         } else {
             line_len = 0;
         }
+        if(xTaskGetTickCount() - weakup_time > 10000 / portTICK_PERIOD_MS) {
+            esp_light_sleep_start();
+            weakup_time = xTaskGetTickCount();
+        }
+
         // vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 }

@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <cJSON.h>
 #include <driver/gpio.h>
+#include "esp_sleep.h"
 
 #include "config_parameter.h"
 #include "rfid_rc522.h"
@@ -197,8 +198,10 @@ void read_and_send_to_queue_task(void *pvParameters)
     char *data_receiver=malloc(2048);
     char data_copy[2048];
    // printf("Start read_and_send_to_queue_task\r\n");
+    TickType_t weakup_time = xTaskGetTickCount();
     while (1)
     {
+        weakup_time = xTaskGetTickCount();
         if(read_enable)
         {
             int len = uart_read_bytes(UART_SIM_NUM, data_receiver, 2048, 30 / portTICK_PERIOD_MS);
@@ -219,6 +222,10 @@ void read_and_send_to_queue_task(void *pvParameters)
         }
         else{
             vTaskDelay(500 / portTICK_PERIOD_MS);
+        }
+        if(xTaskGetTickCount() - weakup_time > 5000 / portTICK_PERIOD_MS) {
+            esp_light_sleep_start();
+            weakup_time = xTaskGetTickCount();
         }
     }
     free(data_receiver);

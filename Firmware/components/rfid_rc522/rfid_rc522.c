@@ -8,6 +8,7 @@
 #include <driver/gpio.h>
 #include <esp_log.h>
 #include <esp_err.h>
+#include "esp_sleep.h"
 
 #include "rfid_rc522.h"
 #include "config_parameter.h"
