@@ -1,5 +1,7 @@
+#include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <driver/spi_master.h>
@@ -10,6 +12,7 @@
 #include "rfid_rc522.h"
 #include "config_parameter.h"
 #include "at_command.h"
+#include "l9110s.h"
 
 static const char *TAG = "RFID_RC522";
 
@@ -356,16 +359,54 @@ rfid_status_t rfid_read_uid(rfid_uid_t *uid)
 
     return st;
 }
+char *history_uid[100];
+int history_uid_index = 0;
 
+void add_history_uid(char *uid_str)
+{
+    if (history_uid_index >= 100) return;
+    history_uid[history_uid_index] = strdup(uid_str);  /* copy string, không lưu pointer */
+    if (history_uid[history_uid_index]) {
+        history_uid_index++;
+    }
+}
+
+void remove_history_uid(char *uid_str)
+{
+    for (int i = 0; i < history_uid_index; i++) {
+        if (history_uid[i] && strcmp(history_uid[i], uid_str) == 0) {
+            free(history_uid[i]);          /* giải phóng bộ nhớ đã strdup */
+            history_uid_index--;
+            for (int j = i; j < history_uid_index; j++) {  /* shift đúng */
+                history_uid[j] = history_uid[j + 1];
+            }
+            history_uid[history_uid_index] = NULL;
+            return;
+        }
+    }
+}
+
+bool check_history_uid(char *uid_str)
+{
+    for (int i = 0; i < history_uid_index; i++) {
+        if (history_uid[i] && strcmp(history_uid[i], uid_str) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+int key_status = 0;
 void rfid_rc522_task(void *pvParameters)
 {
     char uid_str[32];
-    char mqtt_payload[64];
+    char mqtt_payload[512];
     rfid_uid_t last_uid = {0};
     rfid_uid_t uid      = {0}; 
 
     ESP_LOGI(TAG, "Task started - dat the len dau doc...");
-
+   
+    int new_card = 0;
+    int count_error = 0;
     while (1) {
         if (s_spi == NULL) {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -394,11 +435,64 @@ void rfid_rc522_task(void *pvParameters)
             ESP_LOGI(TAG, "The phat hien - UID (%d bytes): %s  SAK:0x%02X",
                      uid.size, uid_str, uid.sak);
 
-            /* Publish only when MQTT is connected */
+            if(strcmp(uid_str, "67:0A:84:33") == 0){
+                gpio_set_level(BUZZER_PIN, 1);
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                gpio_set_level(BUZZER_PIN, 0);
+                // l9110s_lock_request_open();
+                if(key_status == 0) {
+                    key_status = 1;
+                    l9110s_lock_request_open();
+                }
+                else {
+                    key_status = 0;
+                    l9110s_lock_request_close();
+                }
+                count_error = 0;
+                new_card = 0;
+            }
+            else{
+                gpio_set_level(BUZZER_PIN, 1);
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                gpio_set_level(BUZZER_PIN, 0);
+                if(check_history_uid(uid_str)) {
+                    new_card = 0;
+                    if(key_status == 0) {
+                        key_status = 1;
+                        l9110s_lock_request_open();
+                    }
+                    else {
+                        key_status = 0;
+                        l9110s_lock_request_close();
+                    }
+                    count_error = 0;
+                }
+                else {
+                    count_error++;
+                    if(count_error > 3) {
+                        gpio_set_level(BUZZER_PIN, 1);
+                        vTaskDelay(3000 / portTICK_PERIOD_MS);
+                        gpio_set_level(BUZZER_PIN, 0);
+                        if(mqtt_sub_success){
+                            if (mqtt_sub_success) {
+                                snprintf(mqtt_payload, sizeof(mqtt_payload),
+                                         "{\"warning\":\"%d\", \"times\":\"%d\"}", 1, count_error);
+                                // mqtt_publish(MQTT_PUBTOPIC, mqtt_payload);
+                                xQueueSend(publish_queue_handle, mqtt_payload, portMAX_DELAY);
+                            }
+                        }
+                        count_error = 0;
+                    }
+                    new_card = 1;
+                } 
+            }
+
+            /* Publish lên MQTT khi đã kết nối */
             if (mqtt_sub_success) {
                 snprintf(mqtt_payload, sizeof(mqtt_payload),
-                         "{\"rfid\":\"%s\"}", uid_str);
-                mqtt_publish(MQTT_PUBTOPIC, mqtt_payload);
+                         "{\"rfid\":\"%s\", \"key_status\":\"%d\", \"new_card\":\"%d\"}", uid_str, key_status, new_card);
+                // mqtt_publish(MQTT_PUBTOPIC, mqtt_payload);
+                xQueueSend(publish_queue_handle, mqtt_payload, portMAX_DELAY);
             }
         } else {
             memset(&last_uid, 0, sizeof(last_uid));

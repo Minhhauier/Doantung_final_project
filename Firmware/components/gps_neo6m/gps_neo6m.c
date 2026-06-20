@@ -204,7 +204,7 @@ void read_gps_data_task(void *pvParameters)
                 gps_parse_nmea_line(line_buffer, &gps_data);
 
                 if (strncmp(line_buffer, "$GPGLL", 6) == 0 || strncmp(line_buffer, "$GNGLL", 6) == 0) {
-                    if(xTaskGetTickCount() - last_time > 200)
+                    if(xTaskGetTickCount() - last_time > 5000/portTICK_PERIOD_MS)
                     {
                         last_time = xTaskGetTickCount();
                         gps_print_data(&gps_data);

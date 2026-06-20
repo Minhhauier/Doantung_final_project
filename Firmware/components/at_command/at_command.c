@@ -8,9 +8,14 @@
 #include <stdlib.h>
 #include <esp_log.h>
 #include <stdbool.h>
+#include <cJSON.h>
+#include <driver/gpio.h>
 
 #include "config_parameter.h"
+#include "rfid_rc522.h"
+#include "l9110s.h"
 //define global variable
+QueueHandle_t publish_queue_handle;
 static char *MQTT_TAG = "MQTT";
 char data[BUF_SIZE_SIM];
 bool mqtt_sub_success = false;
@@ -85,13 +90,74 @@ void send_at_data_get_respond(const char *data_cmd, int timeout)
     read_sim_respond(timeout);
 }
 
-// void init_queues() {
-//     sim_at_queue_handle = xQueueCreate(10, BUF_SIZE_SIM);
-//     mqtt_queue_handle = xQueueCreate(10, BUF_SIZE_SIM);
-//     gps_queue_handle = xQueueCreate(10, BUF_SIZE_SIM);
-//     publish_queue_handle = xQueueCreate(10, BUF_SIZE_SIM);
-//     queue_created = 1;
-// }
+void init_queues() {
+    publish_queue_handle = xQueueCreate(10, BUF_SIZE_SIM);
+}
+
+void parse_json(const char *json_data) {
+    cJSON *root = cJSON_Parse(json_data);
+    if(root == NULL) {
+        ESP_LOGI("JSON", "Parse JSON failed");
+        return;
+    }
+    cJSON *key_status_json = cJSON_GetObjectItem(root, "key_status");
+    cJSON *new_card = cJSON_GetObjectItem(root, "new_card");
+    cJSON *add_card = cJSON_GetObjectItem(root, "add_card");
+    cJSON *rfid_new = cJSON_GetObjectItem(root, "rfid_new");
+    cJSON *buzzer = cJSON_GetObjectItem(root, "buzzer");
+
+    if(key_status_json != NULL&&cJSON_IsNumber(key_status_json)) {
+        int key_status_value = key_status_json->valueint;
+        if(key_status_value == 1) {
+            if(key_status == 0) {
+            key_status = 1;
+            l9110s_lock_request_open();
+            }
+        }
+        else {
+            if(key_status == 1) {
+                key_status = 0;
+                l9110s_lock_request_close();
+            }
+        }
+    }
+
+    if (rfid_new != NULL&&cJSON_IsString(rfid_new)) {
+        char *new_card_value = rfid_new->valuestring;
+        if(add_card != NULL&&cJSON_IsNumber(add_card)) {
+            int add_card_value = add_card->valueint;
+            if(add_card_value == 1) {
+                if (!check_history_uid(new_card_value)) {
+                    add_history_uid(new_card_value);
+                    printf("Add card: %s\r\n", new_card_value);
+                }
+                else {
+                    printf("Card already in history: %s\r\n", new_card_value);
+                }
+            }
+            else {
+                if (check_history_uid(new_card_value)) {
+                    remove_history_uid(new_card_value);
+                    printf("Remove card: %s\r\n", new_card_value);
+                }
+                else {
+                    printf("Card not in history: %s\r\n", new_card_value);
+                }
+            }
+        }
+    
+    }
+    if (buzzer != NULL&&cJSON_IsNumber(buzzer)) {
+        int buzzer_value = buzzer->valueint;
+        if(buzzer_value == 1) {
+            gpio_set_level(BUZZER_PIN, 1);
+        }
+        else {
+            gpio_set_level(BUZZER_PIN, 0);
+        }
+    }
+    cJSON_Delete(root);
+}
 
 void convert_to_json_update(const char *data) {
     if(data==NULL) return;
@@ -117,7 +183,8 @@ void convert_to_json_update(const char *data) {
       final_data[len]='\0';
       //printf("data_final: %s\r\n",final_data);
       sprintf(the_last_data, "%s}", final_data);
-      printf("data_final: %s\r\n",the_last_data);
+    //   printf("data_final: %s\r\n",the_last_data);
+      parse_json(the_last_data);
         // convert_to_json(final_data);
       start=end+1;  
       free(final_data);
@@ -138,12 +205,12 @@ void read_and_send_to_queue_task(void *pvParameters)
             if (len > 0)
             {
                 data_receiver[len] = '\0';
-                printf("data_rx: %s\r\n",data_receiver);
+                // printf("data_rx: %s\r\n",data_receiver);
                 if (strstr(data_receiver, "+CMQTTRXPAYLOAD:") != NULL)
                 {
                     memcpy(data_copy,data_receiver,len+1);
                 
-                    //printf("data_rx: %s\r\n",data_receiver);
+                    // printf("data_rx: %s\r\n",data_receiver);
                     convert_to_json_update(data_copy);
                     //   printf("Send to mqtt queue: %s\r\n", data_receiver);
                     //  xQueueSend(mqtt_queue_handle, data_receiver, portMAX_DELAY);
@@ -155,6 +222,17 @@ void read_and_send_to_queue_task(void *pvParameters)
         }
     }
     free(data_receiver);
+}
+void queue_data_task(void *pvParameters)
+{
+    while (1)
+    {
+        if(xQueueReceive(publish_queue_handle, data, 1000 / portTICK_PERIOD_MS) == pdPASS)
+        {
+            ESP_LOGI("QUEUE", "Receive data: %s", data);
+            mqtt_publish(MQTT_PUBTOPIC, data);
+        }
+    }
 }
 //for mqtt at command
 
@@ -244,5 +322,6 @@ void publish_gpsposition(float latitude_decimal,float longitude_decimal){
         "    \"latitude\": %f\n"
         "  }\n"
         "}",latitude_decimal,longitude_decimal);
-    mqtt_publish(MQTT_PUBTOPIC, json);
+    // mqtt_publish(MQTT_PUBTOPIC, json);
+    xQueueSend(publish_queue_handle, json, portMAX_DELAY);
 }   

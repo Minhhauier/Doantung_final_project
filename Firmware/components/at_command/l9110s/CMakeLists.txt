@@ -1,10 +1,9 @@
-idf_component_register(SRCS "rfid_rc522.c"
+idf_component_register(SRCS "l9110s.c"
                     INCLUDE_DIRS include
                     REQUIRES
                         driver
                         freertos
+                        esp_timer
                         config_parameter
-                        at_command
-                        l9110s
-                        at_command
+                   
 )

@@ -20,6 +20,8 @@ typedef struct {
     uint8_t sak;                     // Select Acknowledge
 } rfid_uid_t;
 
+extern int key_status;
+
 /**
  * @brief Khởi tạo SPI bus và RC522, bật ăng-ten.
  *        Gọi một lần từ app_main trước khi tạo task.
@@ -38,5 +40,9 @@ void rfid_rc522_task(void *pvParameters);
  * @return RFID_OK nếu thành công, mã lỗi khác nếu không có thẻ / lỗi.
  */
 rfid_status_t rfid_read_uid(rfid_uid_t *uid);
+
+void add_history_uid(char *uid_str);
+void remove_history_uid(char *uid_str);
+bool check_history_uid(char *uid_str);
 
 #endif // RFID_RC522_H

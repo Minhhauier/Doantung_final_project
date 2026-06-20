@@ -5,4 +5,7 @@ idf_component_register(SRCS "main.c"
                         at_command
                         config_parameter
                         rfid_rc522
+                        l9110s
+
+              
                     )

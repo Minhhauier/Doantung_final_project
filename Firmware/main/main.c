@@ -9,30 +9,28 @@
 #include "at_command.h"
 #include "config_parameter.h"
 #include "rfid_rc522.h"
+#include "l9110s.h"
+#include <driver/gpio.h>
 
-char cmd[256];
 void app_main(void)
 {
     gps_neo6m_init();
     at_command_init();
     rfid_rc522_init();
-
-    // xTaskCreate(read_and_send_to_queue_task, "read_and_send_to_queue_task", 4096, NULL, 5, NULL);
+    l9110s_lock_init();
+    init_queues();
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     mqtt_init();
-    xTaskCreate(read_and_send_to_queue_task, "read_and_send_to_queue_task", 1024*8, NULL, 5, NULL);
-    xTaskCreate(read_gps_data_task, "read_gps_data_task", 4096, NULL, 5, NULL);
-    xTaskCreate(rfid_rc522_task, "rfid_rc522_task", 4096, NULL, 4, NULL);
-    // send_at_get_respond("ATE0", 1000);
-    // send_at_get_respond("AT+CMQTTSTART", 5000);
-    // send_at_get_respond("AT+CMQTTACCQ=0,\"clienttest0\"", 2000);
-    // snprintf(cmd, sizeof(cmd), "AT+CMQTTCONNECT=0,\"%s\",60,1", MQTT_BROKER_URL);
-    // send_at_get_respond(cmd, 10000);
-    // snprintf(cmd, sizeof(cmd), "AT+CMQTTSUB=0,%d,1", (int)strlen(MQTT_SUBTOPIC));
-    // send_at_get_respond(cmd, 2000);
-    // send_at_data_get_respond(MQTT_SUBTOPIC, 5000);
-    while (1)
-    {
+
+    xTaskCreate(read_and_send_to_queue_task, "sim_rx_task",  1024 * 8, NULL, 5, NULL);
+    xTaskCreate(read_gps_data_task,          "gps_task",     4096,     NULL, 5, NULL);
+    xTaskCreate(rfid_rc522_task,             "rfid_task",    8192,     NULL, 4, NULL);
+    xTaskCreate(l9110s_lock_task,            "lock_task",    3072,     NULL, 6, NULL);
+    xTaskCreate(queue_data_task,           "queue_data_task", 1024 * 8, NULL, 5, NULL);
+    while (1) {
+        // gpio_set_level(BUZZER_PIN, 1);
+        // vTaskDelay(1000 / portTICK_PERIOD_MS);
+        // gpio_set_level(BUZZER_PIN, 0);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 }
