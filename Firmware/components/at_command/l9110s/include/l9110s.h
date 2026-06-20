@@ -6,10 +6,10 @@
 
 /* ── Trạng thái khóa ─────────────────────────────────────────────────────
  *
- *  LOCK_CLOSING → LOCK_CLOSED  : motor đóng đến khi công tắc hành trình kích
+ *  LOCK_CLOSING → LOCK_CLOSED  : motor đóng đủ LOCK_CLOSE_TIMEOUT_MS
  *  LOCK_CLOSED  → LOCK_OPENING : nhận lệnh mở (nút / RFID / MQTT)
- *  LOCK_OPENING → LOCK_OPEN    : motor mở đủ LOCK_OPEN_DURATION_MS
- *  LOCK_OPEN    → LOCK_CLOSING : nhận lệnh đóng (nút / timeout tự động)
+ *  LOCK_OPENING → LOCK_OPEN    : motor mở đến khi công tắc hành trình kích
+ *  LOCK_OPEN    → LOCK_CLOSING : nhận lệnh đóng, chạy đủ LOCK_CLOSE_TIMEOUT_MS
  */
 typedef enum {
     LOCK_STATE_CLOSED  = 0,   /* DA_DONG  — đã đóng, chờ lệnh mở   */

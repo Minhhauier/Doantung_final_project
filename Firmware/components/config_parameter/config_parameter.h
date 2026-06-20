@@ -30,17 +30,15 @@
 #define RFID_PIN_RST            32
 #define RFID_QUEUE_SIZE         10
 //define parameter for L9110S electronic bolt lock
-#define LOCK_PIN_A              25   // L9110S B1A → chiều mở
-#define LOCK_PIN_B              26   // L9110S B1B → chiều đóng
+#define LOCK_PIN_A              25   // L9110S B1A → turnLeft (mở khóa)
+#define LOCK_PIN_B              26   // L9110S B1B → turnRight (đóng khóa)
 #define BUZZER_PIN              33   // buzzer pin
-// #define LOCK_PIN_BTN_CLOSE      27   // Nút đóng (pull-up nội bộ, tích cực thấp)
-#define LOCK_PIN_LIMIT          35   // Công tắc hành trình (active LOW, pull-up nội bộ)
+#define LOCK_PIN_LIMIT          35   // C nối GPIO35, NO nối 3.3V → kích = HIGH (dùng khi MỞ)
 #define LOCK_PWM_FREQ_HZ        5000
 #define LOCK_PWM_DUTY           204  // 80% of 255 (8-bit)
-#define LOCK_OPEN_DURATION_MS   2000 // Thời gian chạy motor để mở (ms)
-#define LOCK_CLOSE_MIN_RUN_MS   400  // Thời gian chạy tối thiểu trước khi kiểm tra limit (ms)
-#define LOCK_CLOSE_TIMEOUT_MS   4000 // Timeout tối đa khi đóng — dừng motor dù limit chưa kích
-#define LOCK_DEBOUNCE_MS        15   // Chống rung công tắc hành trình (ms)
+#define LOCK_OPEN_TIMEOUT_MS    3000 // Timeout an toàn khi mở (limit hỏng)
+#define LOCK_CLOSE_TIMEOUT_MS   2000 // Thời gian chạy motor để đóng (ms)
+#define LOCK_DEBOUNCE_MS        50   // Debounce limit switch (ms)
 //define parameter for mqtt
 #define MQTT_BROKER_URL         "tcp://broker.chtlab.us:1883"
 #define MQTT_BROKER_PORT        1883

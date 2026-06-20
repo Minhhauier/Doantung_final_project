@@ -395,7 +395,7 @@ bool check_history_uid(char *uid_str)
     }
     return false;
 }
-int key_status = 0;
+int key_status = 1;  /* sau reset khóa ở trạng thái mở */
 void rfid_rc522_task(void *pvParameters)
 {
     char uid_str[32];
